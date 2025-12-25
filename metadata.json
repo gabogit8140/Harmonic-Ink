@@ -1,0 +1,5 @@
+{
+  "name": "Fourier Handwriting Synthesizer",
+  "description": "An interactive tool that reconstructs handwritten words using Fourier Series and epicycles. Users can visualize the mathematical beauty of how rotating vectors can trace any continuous path.",
+  "requestFramePermissions": []
+}
