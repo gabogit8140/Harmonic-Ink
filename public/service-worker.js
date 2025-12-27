@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'fourier-trace-v1';
+const CACHE_NAME = 'fourier-trace-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
