@@ -15,4 +15,5 @@ export interface FourierCoefficient {
 export interface Point {
   x: number;
   y: number;
+  penDown?: boolean;
 }

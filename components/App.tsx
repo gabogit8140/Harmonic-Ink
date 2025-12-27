@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useFourier } from './hooks/useFourier';
-import FourierVisualizer from './components/FourierVisualizer';
-import Header from './components/layout/Header';
-import Footer from './components/layout/Footer';
+import { useFourier } from '../hooks/useFourier';
+import FourierVisualizer from './FourierVisualizer';
+import Header from './layout/Header';
+import Footer from './layout/Footer';
 
 const FONTS = [
   { name: 'Aguafina Script', label: 'Signature' },
@@ -23,7 +23,6 @@ const App: React.FC = () => {
   const [selectedFont, setSelectedFont] = useState(FONTS[0].name);
   const [mode, setMode] = useState<'preview' | 'validating' | 'tracing'>('preview');
 
-  // Simulation State
   const [numHarmonics, setNumHarmonics] = useState(200); 
   const [speed, setSpeed] = useState(0.8);
   const [trailPersistence, setTrailPersistence] = useState(0.98); 
@@ -31,19 +30,16 @@ const App: React.FC = () => {
   const [showCircles, setShowCircles] = useState(true);
   const [resetTrigger, setResetTrigger] = useState(0);
 
-  // Hook for computation
   const { coefficients, targetPoints, penDownPoints, letterBreaks, isComputing, compute, reset, optimalHarmonics, energyFidelity } = useFourier();
 
-  // Reset when text/font changes
   useEffect(() => {
     setMode('preview');
     reset();
   }, [text, selectedFont, reset]);
 
-  // Apply optimal harmonics (90% fidelity) when calculated
   useEffect(() => {
       if (optimalHarmonics > 0) {
-          setNumHarmonics(optimalHarmonics);
+          setNumHarmonics(Math.min(500, optimalHarmonics));
       }
   }, [optimalHarmonics]);
 
@@ -65,8 +61,7 @@ const App: React.FC = () => {
     setIsPaused(false);
   };
 
-  // Memoize fidelity to ensure it's calculated efficiently whenever numHarmonics or energyFidelity changes
-  // This ensures the completeness ratio updates in real-time with the complexity slider
+  // Real-time calculation of Perceptual Fidelity
   const currentFidelity = useMemo(() => {
     if (energyFidelity.length === 0) return 0;
     const index = Math.min(numHarmonics - 1, energyFidelity.length - 1);
@@ -119,7 +114,9 @@ const App: React.FC = () => {
               Status: <span className="text-white font-bold">{mode.toUpperCase()}</span>
             </span>
             <div className="flex gap-8 md:gap-12 items-center">
-              <span className="text-emerald-400 font-black px-2 py-0.5 border border-emerald-400/20 rounded-md bg-emerald-400/5">Perceptual Fidelity: {(currentFidelity * 100).toFixed(2)}%</span>
+              <span className="text-emerald-400 font-black px-2 py-0.5 border border-emerald-400/20 rounded-md bg-emerald-400/5">
+                Perceptual Fidelity: {(currentFidelity * 100).toFixed(2)}%
+              </span>
               <span className="text-cyan-400 font-bold">Vectors: {numHarmonics}</span>
               <span style={{ fontFamily: selectedFont, textTransform: 'none' }} className="text-sm tracking-normal text-white/40">
                 Font: {selectedFont}
