@@ -1,8 +1,8 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { FourierCoefficient, Complex } from '../types';
-import { drawPreview, drawValidationOverlay, drawReferenceShadow, drawEpicycles, drawTrail, drawFourierApproximation, drawClockHUD } from '../utils/draw';
 import { calculateFourierPoint } from '../utils/fourier';
+import { clearCanvas, renderPreviewFrame, renderTracingFrame, renderValidationFrame } from '../utils/renderers';
 import VisualizerControls from './controls/VisualizerControls';
 import ExportModal from './modals/ExportModal';
 import EpicycleList from './visualizer/EpicycleList';
@@ -144,75 +144,26 @@ const FourierVisualizer: React.FC<FourierVisualizerProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Use specific resolution for drawing buffer, matching display size (high DPI handling can be added here if needed)
     if (canvas.width !== canvasSize.width || canvas.height !== canvasSize.height) {
         canvas.width = canvasSize.width;
         canvas.height = canvasSize.height;
     }
 
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    clearCanvas(ctx, canvas.width, canvas.height);
     
     if (mode === 'preview') {
         setStatusText('Preview Mode');
-        drawPreview(ctx, canvas.width, canvas.height, text, fontFamily);
+        renderPreviewFrame({ ctx, width: canvas.width, height: canvas.height }, text, fontFamily);
         requestRef.current = requestAnimationFrame(draw);
         return;
     }
 
-    // Common transform parameters
-    const boundsCX = (bounds.minX + bounds.maxX) / 2;
-    const boundsCY = (bounds.minY + bounds.maxY) / 2;
-    
-    // Fit the content (bounds) into the canvas with padding
-    const padding = 1.2; // 20% padding
-    const scaleX = canvas.width / (bounds.width * padding);
-    const scaleY = canvas.height / (bounds.height * padding);
-    const baseScale = Math.min(scaleX, scaleY);
-
     if (mode === 'validating') {
         setStatusText('Path Validation');
-        
-        ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.scale(baseScale, baseScale);
-        ctx.translate(-boundsCX, -boundsCY);
-        
-        // Draw Path
-        const colors = ['#f87171', '#fbbf24', '#34d399', '#22d3ee', '#818cf8', '#e879f9'];
-        if (targetPath.length > 0) {
-            ctx.lineWidth = 3 / baseScale; // Consistent line width visually
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            let colorIdx = 0;
-            let start = 0;
-            const breaks = letterBreaks.length > 0 ? letterBreaks : [targetPath.length];
-            
-            for(const end of breaks) {
-                ctx.beginPath();
-                ctx.strokeStyle = colors[colorIdx % colors.length];
-                colorIdx++;
-                let first = true;
-                for(let i=start; i<end && i<targetPath.length; i++) {
-                     const p = targetPath[i];
-                     const isDown = penDownPoints[i] !== false;
-                     if(!isDown) { first=true; continue; }
-                     if(first) { ctx.moveTo(p.re, p.im); first=false; }
-                     else ctx.lineTo(p.re, p.im);
-                }
-                ctx.stroke();
-                start = end;
-            }
-        }
-        
-        // Draw Fourier Approximation (faint)
-        drawFourierApproximation(ctx, 0, 0, coefficients, numHarmonics); 
-        ctx.restore();
-        
-        if (showOriginal) {
-            drawPreview(ctx, canvas.width, canvas.height, text, fontFamily);
-        }
-        
+        renderValidationFrame(
+            { ctx, width: canvas.width, height: canvas.height },
+            bounds, targetPath, letterBreaks, penDownPoints, coefficients, numHarmonics, showOriginal, text, fontFamily
+        );
         requestRef.current = requestAnimationFrame(draw);
         return;
     }
@@ -231,8 +182,6 @@ const FourierVisualizer: React.FC<FourierVisualizerProps> = ({
         if (exportLingerStartTimeRef.current === null) {
             exportLingerStartTimeRef.current = performance.now();
         }
-        
-        // 2 second linger
         if (performance.now() - exportLingerStartTimeRef.current > 2000) {
             stopRecording();
             exportLingerStartTimeRef.current = null;
@@ -266,7 +215,6 @@ const FourierVisualizer: React.FC<FourierVisualizerProps> = ({
       for (let s = 0; s < subSteps; s++) {
         if (timeRef.current >= maxTime) {
             timeRef.current = maxTime;
-            // Stop logic is handled by isTraceFinished check in next frame or linger logic
             if (!isExporting) setIsPaused(true); 
             break; 
         }
@@ -291,47 +239,15 @@ const FourierVisualizer: React.FC<FourierVisualizerProps> = ({
     }
 
     // Camera Logic
-    updateCamera(
-        shouldRun, 
-        penX, 
-        penY, 
-        isTraceFinished,
-        numHarmonics
+    updateCamera(shouldRun, penX, penY, isTraceFinished, numHarmonics);
+
+    // Render Frame
+    renderTracingFrame(
+        { ctx, width: canvas.width, height: canvas.height },
+        bounds, cameraRef.current, targetPath, showReference, showCircles, isLingering,
+        activeCoeffs, currentChain, pathRef.current, letterBreaks, pointColors, colorByLetter,
+        penX, penY, showHUD, isExporting, timeRef.current, numHarmonics, fidelity, coefficients
     );
-
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    
-    // Apply Adaptive Scale & Camera
-    ctx.scale(baseScale, baseScale);
-    ctx.scale(cameraRef.current.zoom, cameraRef.current.zoom);
-    ctx.translate(-boundsCX - cameraRef.current.x, -boundsCY - cameraRef.current.y);
-
-    if (showReference) drawReferenceShadow(ctx, targetPath, cameraRef.current.zoom);
-    
-    // Draw Epicycles (Vectors) - Hide during Linger
-    if (showCircles && activeCoeffs.length > 0 && !isLingering) {
-        drawEpicycles(ctx, currentChain, cameraRef.current.zoom);
-    }
-
-    drawTrail(ctx, pathRef.current, cameraRef.current.zoom, {
-        enabled: colorByLetter,
-        breaks: letterBreaks,
-        totalPoints: targetPath.length,
-        customColors: pointColors 
-    });
-
-    ctx.beginPath();
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowBlur = 15 / cameraRef.current.zoom; ctx.shadowColor = '#fff';
-    ctx.arc(penX, penY, 2 / cameraRef.current.zoom, 0, Math.PI * 2);
-    ctx.fill(); ctx.shadowBlur = 0;
-    ctx.restore();
-
-    // Render Cinematic HUD - Hide during Linger
-    if ((showHUD || isExporting) && !isLingering) {
-        drawClockHUD(ctx, canvas.width, canvas.height, coefficients, timeRef.current, numHarmonics, cameraRef.current.zoom, fidelity);
-    }
 
     requestRef.current = requestAnimationFrame(draw);
   };
@@ -377,19 +293,14 @@ const FourierVisualizer: React.FC<FourierVisualizerProps> = ({
   return (
     <div className="flex flex-col gap-6 w-full">
       {renderControls()}
-      
-      {/* Main Canvas Container - Unified for all modes */}
       <div ref={containerRef} className="relative w-full aspect-square md:aspect-video bg-[#020617] rounded-[3rem] border-2 border-white/5 overflow-hidden shadow-2xl">
         <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="w-full h-full block" />
       </div>
-
-      {/* Epicycle Clocks Grid */}
       {mode === 'tracing' && (
         <div className="w-full rounded-[2.5rem] border border-white/5 bg-[#030712]/40 backdrop-blur-xl overflow-hidden p-6 md:p-8">
            <EpicycleList coefficients={coefficients.slice(0, numHarmonics)} t={uiTime} />
         </div>
       )}
-
       <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} onExport={startRecording} />
     </div>
   );

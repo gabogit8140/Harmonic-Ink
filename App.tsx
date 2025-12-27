@@ -5,21 +5,8 @@ import FourierVisualizer from './components/FourierVisualizer';
 import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
 import InfoModal from './components/modals/InfoModal';
-import { Point } from './types';
 import { Stroke } from './utils/drawing';
-
-const FONTS = [
-  { name: 'Aguafina Script', label: 'Signature' },
-  { name: 'Meow Script', label: 'Playful' },
-  { name: 'Mrs Saint Delafield', label: 'Vintage' },
-  { name: 'Parisienne', label: 'Classic' },
-  { name: 'Great Vibes', label: 'Elegant' },
-  { name: 'Allura', label: 'Flowing' },
-  { name: 'Petit Formal Script', label: 'Formal' },
-  { name: 'Pinyon Script', label: 'Aristocrat' },
-  { name: 'Rouge Script', label: 'Chic' },
-  { name: 'Herr Von Muellerhoff', label: 'Scribe' },
-];
+import { FONTS } from './utils/constants';
 
 const App: React.FC = () => {
   const [inputType, setInputType] = useState<'text' | 'drawing'>('text');
@@ -27,7 +14,6 @@ const App: React.FC = () => {
   const [selectedFont, setSelectedFont] = useState(FONTS[0].name);
   const [mode, setMode] = useState<'preview' | 'validating' | 'tracing'>('preview');
 
-  // Simulation State
   const [numHarmonics, setNumHarmonics] = useState(200); 
   const [speed, setSpeed] = useState(0.8);
   const [trailPersistence, setTrailPersistence] = useState(0.98); 
@@ -36,13 +22,12 @@ const App: React.FC = () => {
   const [resetTrigger, setResetTrigger] = useState(0);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  // Hook for computation
   const { 
     coefficients, 
     targetPoints, 
     penDownPoints, 
-    letterBreaks, 
     pointColors,
+    letterBreaks, 
     isComputing, 
     compute, 
     computeFromStrokes,
@@ -51,18 +36,16 @@ const App: React.FC = () => {
     energyFidelity 
   } = useFourier();
 
-  // Reset when text/font changes (only in text mode)
   useEffect(() => {
     if (inputType === 'text') {
-        setMode('preview');
-        reset();
+      setMode('preview');
+      reset();
     }
   }, [text, selectedFont, reset, inputType]);
 
-  // Apply optimal harmonics (90% fidelity) when calculated
   useEffect(() => {
       if (optimalHarmonics > 0) {
-          setNumHarmonics(optimalHarmonics);
+          setNumHarmonics(Math.min(500, optimalHarmonics));
       }
   }, [optimalHarmonics]);
 
@@ -74,10 +57,10 @@ const App: React.FC = () => {
   };
 
   const handleComputeDrawing = (strokes: Stroke[]) => {
-      const success = computeFromStrokes(strokes);
-      if (success) {
-          setMode('validating');
-      }
+    const success = computeFromStrokes(strokes);
+    if (success) {
+        setMode('validating');
+    }
   };
 
   const handleConfirmValidation = () => {
@@ -91,6 +74,7 @@ const App: React.FC = () => {
     setIsPaused(false);
   };
 
+  // Real-time calculation of Perceptual Fidelity
   const currentFidelity = useMemo(() => {
     if (energyFidelity.length === 0) return 0;
     const index = Math.min(numHarmonics - 1, energyFidelity.length - 1);
@@ -148,7 +132,9 @@ const App: React.FC = () => {
               Status: <span className="text-white font-bold">{mode.toUpperCase()}</span>
             </span>
             <div className="flex gap-8 md:gap-12 items-center">
-              <span className="text-emerald-400 font-black px-2 py-0.5 border border-emerald-400/20 rounded-md bg-emerald-400/5">Perceptual Fidelity: {(currentFidelity * 100).toFixed(2)}%</span>
+              <span className="text-emerald-400 font-black px-2 py-0.5 border border-emerald-400/20 rounded-md bg-emerald-400/5">
+                Perceptual Fidelity: {(currentFidelity * 100).toFixed(2)}%
+              </span>
               <span className="text-cyan-400 font-bold">Vectors: {numHarmonics}</span>
               <span style={{ fontFamily: selectedFont, textTransform: 'none' }} className="text-sm tracking-normal text-white/40">
                 Source: {inputType === 'text' ? selectedFont : 'Hand Drawn'}
