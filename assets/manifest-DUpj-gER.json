@@ -1,0 +1,17 @@
+
+{
+  "name": "Harmonic Ink",
+  "short_name": "HarmonicInk",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "description": "An interactive tool that reconstructs handwritten words using Fourier Series.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
