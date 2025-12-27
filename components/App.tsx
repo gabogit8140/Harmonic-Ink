@@ -4,6 +4,7 @@ import { useFourier } from '../hooks/useFourier';
 import FourierVisualizer from './FourierVisualizer';
 import Header from './layout/Header';
 import Footer from './layout/Footer';
+import InfoModal from './modals/InfoModal';
 
 const FONTS = [
   { name: 'Aguafina Script', label: 'Signature' },
@@ -29,6 +30,7 @@ const App: React.FC = () => {
   const [isPaused, setIsPaused] = useState(true);
   const [showCircles, setShowCircles] = useState(true);
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const { coefficients, targetPoints, penDownPoints, letterBreaks, isComputing, compute, reset, optimalHarmonics, energyFidelity } = useFourier();
 
@@ -81,6 +83,7 @@ const App: React.FC = () => {
         isComputing={isComputing}
         onCompute={handleCompute}
         onConfirmValidation={handleConfirmValidation}
+        onOpenInfo={() => setIsInfoModalOpen(true)}
       />
 
       <main className="w-full flex flex-col gap-8 flex-1 z-0">
@@ -127,6 +130,7 @@ const App: React.FC = () => {
       </main>
 
       <Footer />
+      <InfoModal isOpen={isInfoModalOpen} onClose={() => setIsInfoModalOpen(false)} />
     </div>
   );
 };

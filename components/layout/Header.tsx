@@ -17,6 +17,7 @@ interface HeaderProps {
   isComputing: boolean;
   onCompute: () => void;
   onConfirmValidation: () => void;
+  onOpenInfo: () => void;
 }
 
 const HeaderIcon = () => (
@@ -70,27 +71,44 @@ const Header: React.FC<HeaderProps> = ({
   isComputing,
   onCompute,
   onConfirmValidation,
+  onOpenInfo,
 }) => {
   return (
     <header className="w-full flex flex-col items-center gap-8 py-8 relative z-10">
       
       {/* Brand Section: Icon Left of Name */}
-      <div className="flex flex-row items-center justify-center gap-5 md:gap-6">
-        <div className="relative group shrink-0 w-16 h-16 md:w-20 md:h-20">
-            <div className="absolute -inset-4 bg-cyan-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-            <div className="relative z-10 w-full h-full drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
-                <HeaderIcon />
+      <div className="flex flex-row items-center justify-center gap-5 md:gap-6 relative w-full">
+        <div className="flex flex-row items-center justify-center gap-5 md:gap-6">
+            <div className="relative group shrink-0 w-16 h-16 md:w-20 md:h-20">
+                <div className="absolute -inset-4 bg-cyan-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                <div className="relative z-10 w-full h-full drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
+                    <HeaderIcon />
+                </div>
+            </div>
+            
+            <div className="flex flex-col items-start">
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-black bg-gradient-to-br from-white via-slate-200 to-slate-500 bg-clip-text text-transparent tracking-tighter uppercase font-sans leading-none">
+                Harmonic Ink
+                </h1>
+                <p className="text-slate-500 text-[10px] md:text-xs font-bold tracking-[0.3em] md:tracking-[0.4em] uppercase mt-2 ml-1">
+                Fourier Series Handwriting
+                </p>
             </div>
         </div>
         
-        <div className="flex flex-col items-start">
-             <h1 className="text-4xl md:text-5xl lg:text-6xl font-black bg-gradient-to-br from-white via-slate-200 to-slate-500 bg-clip-text text-transparent tracking-tighter uppercase font-sans leading-none">
-             Harmonic Ink
-             </h1>
-             <p className="text-slate-500 text-[10px] md:text-xs font-bold tracking-[0.3em] md:tracking-[0.4em] uppercase mt-2 ml-1">
-             Fourier Series Handwriting
-             </p>
-        </div>
+        {/* Info Button - Highly visible pill button */}
+        <button 
+            onClick={onOpenInfo}
+            className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-3 px-5 py-2.5 bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-white transition-all rounded-full border border-white/10 hover:border-cyan-500/30 hidden md:flex group backdrop-blur-md shadow-lg hover:shadow-cyan-500/10"
+            title="User Guide & Mathematics"
+        >
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Guide</span>
+            <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-cyan-500/20 group-hover:text-cyan-400 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+        </button>
       </div>
 
       {/* Input Section */}
@@ -106,7 +124,7 @@ const Header: React.FC<HeaderProps> = ({
                 disabled={mode !== 'preview'}
             />
             
-            <div className="flex shrink-0">
+            <div className="flex shrink-0 items-center">
                 {mode === 'preview' && (
                     <button
                     onClick={onCompute}
@@ -127,6 +145,15 @@ const Header: React.FC<HeaderProps> = ({
                 )}
             </div>
           </div>
+          
+          {/* Mobile Info Button (Below input) */}
+          <button 
+              onClick={onOpenInfo}
+              className="md:hidden w-full mt-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-cyan-400 flex items-center justify-center gap-2"
+          >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              How it works
+          </button>
       </div>
 
       {/* Font Selection */}
