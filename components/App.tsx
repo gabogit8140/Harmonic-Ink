@@ -5,6 +5,7 @@ import FourierVisualizer from './FourierVisualizer';
 import Header from './layout/Header';
 import Footer from './layout/Footer';
 import InfoModal from './modals/InfoModal';
+import { Stroke } from '../utils/drawing';
 
 const FONTS = [
   { name: 'Aguafina Script', label: 'Signature' },
@@ -20,6 +21,7 @@ const FONTS = [
 ];
 
 const App: React.FC = () => {
+  const [inputType, setInputType] = useState<'text' | 'drawing'>('text');
   const [text, setText] = useState('My text');
   const [selectedFont, setSelectedFont] = useState(FONTS[0].name);
   const [mode, setMode] = useState<'preview' | 'validating' | 'tracing'>('preview');
@@ -32,12 +34,26 @@ const App: React.FC = () => {
   const [resetTrigger, setResetTrigger] = useState(0);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  const { coefficients, targetPoints, penDownPoints, letterBreaks, isComputing, compute, reset, optimalHarmonics, energyFidelity } = useFourier();
+  const { 
+    coefficients, 
+    targetPoints, 
+    penDownPoints, 
+    pointColors,
+    letterBreaks, 
+    isComputing, 
+    compute, 
+    computeFromStrokes,
+    reset, 
+    optimalHarmonics, 
+    energyFidelity 
+  } = useFourier();
 
   useEffect(() => {
-    setMode('preview');
-    reset();
-  }, [text, selectedFont, reset]);
+    if (inputType === 'text') {
+      setMode('preview');
+      reset();
+    }
+  }, [text, selectedFont, reset, inputType]);
 
   useEffect(() => {
       if (optimalHarmonics > 0) {
@@ -45,10 +61,17 @@ const App: React.FC = () => {
       }
   }, [optimalHarmonics]);
 
-  const handleCompute = async () => {
+  const handleComputeText = async () => {
     const success = await compute(text, selectedFont);
     if (success) {
       setMode('validating');
+    }
+  };
+
+  const handleComputeDrawing = (strokes: Stroke[]) => {
+    const success = computeFromStrokes(strokes);
+    if (success) {
+        setMode('validating');
     }
   };
 
@@ -73,6 +96,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#020617] p-4 md:p-8 flex flex-col items-center max-w-7xl mx-auto space-y-8">
       <Header 
+        inputType={inputType}
+        onInputTypeChange={(t) => { setInputType(t); setMode('preview'); }}
         text={text}
         onTextChange={setText}
         selectedFont={selectedFont}
@@ -81,7 +106,8 @@ const App: React.FC = () => {
         mode={mode}
         onModeChange={setMode}
         isComputing={isComputing}
-        onCompute={handleCompute}
+        onComputeText={handleComputeText}
+        onComputeDrawing={handleComputeDrawing}
         onConfirmValidation={handleConfirmValidation}
         onOpenInfo={() => setIsInfoModalOpen(true)}
       />
@@ -89,12 +115,13 @@ const App: React.FC = () => {
       <main className="w-full flex flex-col gap-8 flex-1 z-0">
         <div className="relative w-full">
           <FourierVisualizer 
-            text={text}
+            text={inputType === 'text' ? text : 'Custom Drawing'}
             fontFamily={selectedFont}
             mode={mode}
             coefficients={coefficients} 
             targetPath={targetPoints}
             penDownPoints={penDownPoints}
+            pointColors={pointColors}
             letterBreaks={letterBreaks}
             numHarmonics={numHarmonics}
             setNumHarmonics={setNumHarmonics}
@@ -122,7 +149,7 @@ const App: React.FC = () => {
               </span>
               <span className="text-cyan-400 font-bold">Vectors: {numHarmonics}</span>
               <span style={{ fontFamily: selectedFont, textTransform: 'none' }} className="text-sm tracking-normal text-white/40">
-                Font: {selectedFont}
+                Source: {inputType === 'text' ? selectedFont : 'Hand Drawn'}
               </span>
             </div>
           </div>

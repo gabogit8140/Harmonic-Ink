@@ -32,6 +32,11 @@ export const useVisualizerCamera = () => {
            targetZoom = 0.9; 
            targetCamX = 0; 
            targetCamY = 0;
+        } else {
+           // Paused state: Maintain current position
+           targetZoom = cameraRef.current.zoom;
+           targetCamX = cameraRef.current.x;
+           targetCamY = cameraRef.current.y;
         }
 
         // Smooth interpolation

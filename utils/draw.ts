@@ -1,5 +1,4 @@
 
-// @google/genai used in other files but this utility handles canvas drawing.
 import { Complex, FourierCoefficient } from '../types';
 
 export const drawArrow = (ctx: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number, alpha: number) => {
@@ -46,13 +45,13 @@ export const drawValidationOverlay = (
   letterBreaks: number[] = [],
   penDownPoints: boolean[] = []
 ) => {
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
-
+  // This helper is kept for reference but FourierVisualizer now handles its own transforms for better adaptive scaling
+  // We apply identity here relative to the transformed context
+  
   const colors = ['#f87171', '#fbbf24', '#34d399', '#22d3ee', '#818cf8', '#e879f9'];
 
   if (path.length > 0) {
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3; 
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       
@@ -96,8 +95,6 @@ export const drawValidationOverlay = (
          startIdx = letterBreaks[i];
      }
   }
-
-  ctx.restore();
 };
 
 export const drawFourierApproximation = (
@@ -108,8 +105,7 @@ export const drawFourierApproximation = (
   numHarmonics: number
 ) => {
   if (coeffs.length === 0) return;
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
+  // Assumes context is already transformed
   const activeCoeffs = coeffs.slice(0, Math.min(numHarmonics, coeffs.length));
   ctx.beginPath();
   ctx.strokeStyle = 'rgba(34, 211, 238, 0.8)';
@@ -128,7 +124,6 @@ export const drawFourierApproximation = (
     else ctx.lineTo(x, y);
   }
   ctx.stroke();
-  ctx.restore();
 };
 
 export const drawReferenceShadow = (ctx: CanvasRenderingContext2D, targetPath: Complex[], zoom: number) => {
@@ -198,227 +193,204 @@ export const drawTrail = (
   ctx: CanvasRenderingContext2D, 
   path: {x: number, y: number, alpha: number, t?: number, isDown?: boolean}[], 
   zoom: number,
-  colorMode: { enabled: boolean, breaks: number[], totalPoints: number } = { enabled: false, breaks: [], totalPoints: 0 }
+  colorMode: { enabled: boolean, breaks: number[], totalPoints: number, customColors?: string[] } = { enabled: false, breaks: [], totalPoints: 0 }
 ) => {
   if (path.length <= 1) return;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  if (colorMode.enabled && colorMode.totalPoints > 0) {
-      const letterColors = ['#22d3ee', '#f472b6', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#60a5fa'];
-      ctx.lineWidth = 4 / zoom;
-      const getLetterIdx = (t: number) => {
-          const progress = t / Math.PI; 
-          const estimatedIdx = Math.floor(progress * colorMode.totalPoints);
-          let idx = 0;
-          for (let k = 0; k < colorMode.breaks.length; k++) { if (estimatedIdx >= colorMode.breaks[k]) { idx = k + 1; } }
-          return idx;
+  ctx.lineWidth = 4 / zoom;
+
+  // Mode: Custom Colors (from Drawing)
+  if (colorMode.customColors && colorMode.customColors.length > 0 && colorMode.totalPoints > 0) {
+      const getColorAt = (t: number) => {
+          const progress = Math.max(0, Math.min(1, t / Math.PI));
+          const idx = Math.floor(progress * (colorMode.totalPoints - 1));
+          return colorMode.customColors![idx] || '#22d3ee';
       };
-      ctx.beginPath();
-      let currentLetterIdx = -1;
+
+      let currentStrokeColor = '';
       let firstPoint = true;
-      for (let i = 0; i < path.length; i++) {
-          const p = path[i];
-          if (typeof p.t !== 'number') continue;
-          if (p.isDown === false) { if (!firstPoint) { ctx.stroke(); firstPoint = true; ctx.beginPath(); } continue; }
-          const idx = getLetterIdx(p.t);
-          if (idx !== currentLetterIdx) {
-             ctx.stroke();
-             currentLetterIdx = idx;
-             ctx.beginPath();
-             ctx.strokeStyle = letterColors[currentLetterIdx % letterColors.length];
-             ctx.moveTo(p.x, p.y);
-             firstPoint = false;
-          } else {
-             if (firstPoint) {
-                 currentLetterIdx = idx;
+
+      for (let i = 0; i < path.length - 1; i++) {
+        const p1 = path[i];
+        const p2 = path[i+1];
+        
+        // Handle Gaps
+        if (!p1.isDown || !p2.isDown) {
+             if (!firstPoint) {
+                 ctx.stroke();
                  ctx.beginPath();
-                 ctx.strokeStyle = letterColors[currentLetterIdx % letterColors.length];
-                 ctx.moveTo(p.x, p.y);
-                 firstPoint = false;
-             } else { ctx.lineTo(p.x, p.y); }
-          }
+             }
+             firstPoint = true;
+             continue;
+        }
+
+        const color = getColorAt(p1.t || 0);
+        
+        if (color !== currentStrokeColor || firstPoint) {
+            if (!firstPoint) ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.moveTo(p1.x, p1.y);
+            currentStrokeColor = color;
+            firstPoint = false;
+        }
+        ctx.lineTo(p2.x, p2.y);
       }
-      ctx.stroke();
-      if (path.length > 0) {
-          const tip = path[path.length-1];
-          if (tip.isDown !== false) {
-              ctx.fillStyle = 'white';
+      if (!firstPoint) ctx.stroke();
+      return;
+  }
+
+  // Mode: Letter Colors (Text)
+  if (colorMode.enabled && colorMode.breaks.length > 0 && colorMode.totalPoints > 0) {
+      const colors = ['#f87171', '#fbbf24', '#34d399', '#22d3ee', '#818cf8', '#e879f9'];
+      let colorIdx = 0;
+      let nextBreakIdx = 0;
+      let currentLimitRatio = colorMode.breaks[0] / colorMode.totalPoints;
+      
+      ctx.beginPath();
+      let currentColor = colors[0];
+      ctx.strokeStyle = currentColor;
+      
+      let firstPoint = true;
+
+      for (let i = 0; i < path.length - 1; i++) {
+          const p1 = path[i];
+          const p2 = path[i+1];
+
+          // Handle Gaps
+          if (!p1.isDown || !p2.isDown) {
+             if (!firstPoint) {
+                 ctx.stroke();
+                 ctx.beginPath();
+             }
+             firstPoint = true;
+             continue; 
+          }
+
+          const progress = (p1.t || 0) / Math.PI;
+          
+          if (progress > currentLimitRatio && nextBreakIdx < colorMode.breaks.length) {
+              if (!firstPoint) ctx.stroke();
+              
+              nextBreakIdx++;
+              colorIdx++;
+              if (nextBreakIdx < colorMode.breaks.length) {
+                 currentLimitRatio = colorMode.breaks[nextBreakIdx] / colorMode.totalPoints;
+              } else {
+                 currentLimitRatio = 1.1;
+              }
+              
+              currentColor = colors[colorIdx % colors.length];
               ctx.beginPath();
-              ctx.arc(tip.x, tip.y, 2.5 / zoom, 0, Math.PI*2);
-              ctx.fill();
+              ctx.strokeStyle = currentColor;
+              ctx.moveTo(p1.x, p1.y); 
+          } else if (firstPoint) {
+              ctx.beginPath();
+              ctx.strokeStyle = currentColor;
+              ctx.moveTo(p1.x, p1.y);
+              firstPoint = false;
           }
+
+          ctx.lineTo(p2.x, p2.y);
       }
+      if (!firstPoint) ctx.stroke();
   } else {
-      const freshCount = 60;
-      const historicLength = Math.max(0, path.length - freshCount);
-      if (historicLength > 1) {
-          ctx.lineWidth = 4 / zoom;
-          ctx.beginPath();
-          ctx.strokeStyle = '#22d3ee'; 
-          let first = true;
-          for (let i = 0; i < historicLength; i++) {
-              const p = path[i];
-              if (p.isDown === false) { first = true; continue; }
-              if (first) { ctx.moveTo(p.x, p.y); first = false; }
-              else { ctx.lineTo(p.x, p.y); }
+      // Default Gradient Trail
+      if (path.length < 2) return;
+      
+      let startIndex = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+          if (!path[i].isDown) {
+              if (i > startIndex) {
+                 drawSimpleSegment(ctx, path, startIndex, i);
+              }
+              startIndex = i + 1;
           }
-          ctx.stroke();
       }
-      const startFresh = Math.max(0, historicLength - 1);
-      for (let i = startFresh + 1; i < path.length; i++) {
-          const p1 = path[i-1]; const p2 = path[i];
-          if (p1.isDown === false || p2.isDown === false) continue;
-          const t = (i - startFresh) / (path.length - startFresh);
-          let r, g, b;
-          if (t < 0.5) {
-              const localT = t * 2;
-              r = 34 + (236 - 34) * localT; g = 211 + (72 - 211) * localT; b = 238 + (153 - 238) * localT;
-          } else {
-              const localT = (t - 0.5) * 2;
-              r = 236 + (255 - 236) * localT; g = 72 + (255 - 72) * localT; b = 153 + (255 - 153) * localT;
-          }
-          ctx.beginPath();
-          ctx.strokeStyle = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-          ctx.lineWidth = (4 + 1.5 * t) / zoom;
-          ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      }
-      if (path.length > 0) {
-          const tip = path[path.length-1];
-          if (tip.isDown !== false) {
-            ctx.shadowBlur = 15 / zoom; ctx.shadowColor = 'white';
-            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(tip.x, tip.y, 2.5 / zoom, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 0;
-          }
+      if (startIndex < path.length - 1) {
+          drawSimpleSegment(ctx, path, startIndex, path.length - 1);
       }
   }
 };
 
-/**
- * Expanded High-fidelity HUD overlay for video export.
- * Now features a multi-row grid of vectors (Harmonic Matrix).
- */
+const drawSimpleSegment = (ctx: CanvasRenderingContext2D, path: any[], start: number, end: number) => {
+    if (start >= end) return;
+    ctx.beginPath();
+    const grad = ctx.createLinearGradient(path[start].x, path[start].y, path[end].x, path[end].y);
+    grad.addColorStop(0, '#22d3ee');
+    grad.addColorStop(1, '#a78bfa');
+    ctx.strokeStyle = grad;
+    ctx.moveTo(path[start].x, path[start].y);
+    for(let i=start+1; i<=end; i++) {
+        ctx.lineTo(path[i].x, path[i].y);
+    }
+    ctx.stroke();
+};
+
 export const drawClockHUD = (
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    coefficients: FourierCoefficient[],
-    t: number,
+    ctx: CanvasRenderingContext2D, 
+    width: number, 
+    height: number, 
+    coeffs: FourierCoefficient[], 
+    t: number, 
     numHarmonics: number,
     zoom: number,
     fidelity: number = 0
 ) => {
     ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const padding = 40;
     
-    const uiScale = width / 1200;
-    const padding = 40 * uiScale;
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#64748b';
     
-    // Bottom Bar Background - Deeper and Taller to accommodate more rows
-    const rows = 3;
-    const cols = 12;
-    const barHeight = 220 * uiScale; 
-    const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
-    gradient.addColorStop(0, 'rgba(2, 6, 23, 0)');
-    gradient.addColorStop(0.2, 'rgba(2, 6, 23, 0.95)');
-    gradient.addColorStop(1, 'rgba(2, 6, 23, 1)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, height - barHeight, width, barHeight);
+    // Calculate percentage based on t (0 to PI)
+    const percentage = Math.min(100, Math.max(0, (t / Math.PI) * 100));
+    ctx.fillText(`COMPLETION: ${percentage.toFixed(1)}%`, padding, padding);
 
-    // Matrix Layout
-    const maxN = rows * cols;
-    const activeCoeffs = coefficients.slice(0, Math.min(maxN, numHarmonics));
-    const clockSize = 50 * uiScale;
-    const hSpacing = (width - padding * 2) / cols;
-    const vSpacing = (barHeight - 60 * uiScale) / rows;
-    
-    const maxAmp = activeCoeffs.length > 0 ? activeCoeffs[0].amp : 1;
-
-    activeCoeffs.forEach((c, i) => {
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-        
-        const centerX = padding + hSpacing * col + hSpacing / 2;
-        const centerY = (height - barHeight) + 60 * uiScale + vSpacing * row + vSpacing / 2;
-        const radius = clockSize * 0.35;
-        
-        const phase = c.freq * t + c.phase;
-        const hue = (i * 20) % 360;
-        const color = `hsla(${hue}, 90%, 75%, 1)`;
-
-        // Relative Amp Ring
-        const relAmp = c.amp / maxAmp;
-        ctx.beginPath();
-        ctx.fillStyle = `hsla(${hue}, 90%, 50%, ${0.05 + relAmp * 0.1})`;
-        ctx.arc(centerX, centerY, radius * 1.2, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Clock Outer Rim
-        ctx.beginPath();
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 + relAmp * 0.2})`;
-        ctx.lineWidth = 1 * uiScale;
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Vector Hand
-        ctx.save();
-        ctx.shadowBlur = 10 * uiScale * relAmp;
-        ctx.shadowColor = color;
-        ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = (2 + relAmp * 2) * uiScale;
-        ctx.lineCap = 'round';
-        ctx.moveTo(centerX, centerY);
-        const tipX = centerX + Math.cos(phase) * radius;
-        const tipY = centerY + Math.sin(phase) * radius;
-        ctx.lineTo(tipX, tipY);
-        ctx.stroke();
-        ctx.restore();
-
-        // Tiny Labels
-        ctx.textAlign = 'center';
-        ctx.font = `bold ${8 * uiScale}px monospace`;
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fillText(`H${Math.abs(c.freq)}`, centerX, centerY + radius + 12 * uiScale);
-        
-        if (relAmp > 0.1) {
-            ctx.fillStyle = color;
-            ctx.font = `900 ${7 * uiScale}px monospace`;
-            ctx.fillText(c.amp.toFixed(0), centerX, centerY - radius - 5 * uiScale);
-        }
-    });
-
-    // Top Header Status
-    const headHeight = 60 * uiScale;
-    ctx.fillStyle = 'rgba(2, 6, 23, 0.85)';
-    ctx.fillRect(0, 0, width, headHeight);
-    
-    // Pulsing "REC" or "LIVE" indicator
-    const blink = Math.floor(Date.now() / 500) % 2 === 0;
-    if (blink) {
-        ctx.beginPath();
-        ctx.fillStyle = '#ef4444';
-        ctx.arc(padding, headHeight / 2, 5 * uiScale, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    
-    // Status Text
-    ctx.font = `900 ${14 * uiScale}px sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#22d3ee';
-    ctx.fillText("MATRIX SIGNAL PROCESSING // HIGH FIDELITY SYNTHESIS", padding + 15 * uiScale, headHeight / 2);
-
-    // Metrics readouts
-    ctx.textAlign = 'right';
-    ctx.font = `bold ${12 * uiScale}px monospace`;
-    ctx.fillStyle = 'white';
-    ctx.fillText(`NODES: ${numHarmonics} | FIDELITY: ${(fidelity * 100).toFixed(2)}% | ZOOM: ${zoom.toFixed(1)}x`, width - padding, headHeight / 2);
-
-    // Aesthetic grid lines for header
-    ctx.strokeStyle = 'rgba(34, 211, 238, 0.2)';
-    ctx.lineWidth = 0.5 * uiScale;
+    const isDone = t >= Math.PI - 0.01;
+    ctx.fillStyle = isDone ? '#10b981' : '#22d3ee';
     ctx.beginPath();
-    ctx.moveTo(0, headHeight); ctx.lineTo(width, headHeight);
+    ctx.arc(padding + 5, padding + 20, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.font = 'bold 10px "Inter", sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(isDone ? 'COMPLETE' : 'SYNTHESIZING', padding + 15, padding + 23);
+
+    const bottomY = height - padding;
+    
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(`ZOOM: ${zoom.toFixed(2)}x`, padding, bottomY - 35);
+    
+    if (fidelity > 0) {
+        ctx.fillStyle = '#10b981';
+        ctx.fillText(`Fidelity: ${(fidelity * 100).toFixed(2)}%`, padding, bottomY - 20);
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(padding, bottomY - 15, 100, 3);
+        ctx.fillStyle = '#10b981';
+        ctx.fillRect(padding, bottomY - 15, 100 * fidelity, 3);
+    }
+
+    ctx.fillStyle = '#22d3ee';
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.fillText(`VECTORS: ${numHarmonics}`, padding, bottomY);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+    
+    ctx.beginPath();
+    ctx.moveTo(padding, bottomY + 10);
+    ctx.lineTo(padding, bottomY - 50);
+    ctx.moveTo(padding, bottomY + 10);
+    ctx.lineTo(padding + 100, bottomY + 10);
+    
+    ctx.setLineDash([4, 4]);
     ctx.stroke();
+    ctx.setLineDash([]);
 
     ctx.restore();
 };

@@ -1,9 +1,12 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useFourier } from './hooks/useFourier';
 import FourierVisualizer from './components/FourierVisualizer';
 import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
 import InfoModal from './components/modals/InfoModal';
+import { Point } from './types';
+import { Stroke } from './utils/drawing';
 
 const FONTS = [
   { name: 'Aguafina Script', label: 'Signature' },
@@ -19,6 +22,7 @@ const FONTS = [
 ];
 
 const App: React.FC = () => {
+  const [inputType, setInputType] = useState<'text' | 'drawing'>('text');
   const [text, setText] = useState('My text');
   const [selectedFont, setSelectedFont] = useState(FONTS[0].name);
   const [mode, setMode] = useState<'preview' | 'validating' | 'tracing'>('preview');
@@ -33,13 +37,27 @@ const App: React.FC = () => {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Hook for computation
-  const { coefficients, targetPoints, penDownPoints, letterBreaks, isComputing, compute, reset, optimalHarmonics, energyFidelity } = useFourier();
+  const { 
+    coefficients, 
+    targetPoints, 
+    penDownPoints, 
+    letterBreaks, 
+    pointColors,
+    isComputing, 
+    compute, 
+    computeFromStrokes,
+    reset, 
+    optimalHarmonics, 
+    energyFidelity 
+  } = useFourier();
 
-  // Reset when text/font changes
+  // Reset when text/font changes (only in text mode)
   useEffect(() => {
-    setMode('preview');
-    reset();
-  }, [text, selectedFont, reset]);
+    if (inputType === 'text') {
+        setMode('preview');
+        reset();
+    }
+  }, [text, selectedFont, reset, inputType]);
 
   // Apply optimal harmonics (90% fidelity) when calculated
   useEffect(() => {
@@ -48,11 +66,18 @@ const App: React.FC = () => {
       }
   }, [optimalHarmonics]);
 
-  const handleCompute = async () => {
+  const handleComputeText = async () => {
     const success = await compute(text, selectedFont);
     if (success) {
       setMode('validating');
     }
+  };
+
+  const handleComputeDrawing = (strokes: Stroke[]) => {
+      const success = computeFromStrokes(strokes);
+      if (success) {
+          setMode('validating');
+      }
   };
 
   const handleConfirmValidation = () => {
@@ -66,8 +91,6 @@ const App: React.FC = () => {
     setIsPaused(false);
   };
 
-  // Memoize fidelity to ensure it's calculated efficiently whenever numHarmonics or energyFidelity changes
-  // This ensures the completeness ratio updates in real-time with the complexity slider
   const currentFidelity = useMemo(() => {
     if (energyFidelity.length === 0) return 0;
     const index = Math.min(numHarmonics - 1, energyFidelity.length - 1);
@@ -77,6 +100,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#020617] p-4 md:p-8 flex flex-col items-center max-w-7xl mx-auto space-y-8">
       <Header 
+        inputType={inputType}
+        onInputTypeChange={(t) => { setInputType(t); setMode('preview'); }}
         text={text}
         onTextChange={setText}
         selectedFont={selectedFont}
@@ -85,7 +110,8 @@ const App: React.FC = () => {
         mode={mode}
         onModeChange={setMode}
         isComputing={isComputing}
-        onCompute={handleCompute}
+        onComputeText={handleComputeText}
+        onComputeDrawing={handleComputeDrawing}
         onConfirmValidation={handleConfirmValidation}
         onOpenInfo={() => setIsInfoModalOpen(true)}
       />
@@ -93,12 +119,13 @@ const App: React.FC = () => {
       <main className="w-full flex flex-col gap-8 flex-1 z-0">
         <div className="relative w-full">
           <FourierVisualizer 
-            text={text}
+            text={inputType === 'text' ? text : 'Custom Drawing'}
             fontFamily={selectedFont}
             mode={mode}
             coefficients={coefficients} 
             targetPath={targetPoints}
             penDownPoints={penDownPoints}
+            pointColors={pointColors}
             letterBreaks={letterBreaks}
             numHarmonics={numHarmonics}
             setNumHarmonics={setNumHarmonics}
@@ -124,7 +151,7 @@ const App: React.FC = () => {
               <span className="text-emerald-400 font-black px-2 py-0.5 border border-emerald-400/20 rounded-md bg-emerald-400/5">Perceptual Fidelity: {(currentFidelity * 100).toFixed(2)}%</span>
               <span className="text-cyan-400 font-bold">Vectors: {numHarmonics}</span>
               <span style={{ fontFamily: selectedFont, textTransform: 'none' }} className="text-sm tracking-normal text-white/40">
-                Font: {selectedFont}
+                Source: {inputType === 'text' ? selectedFont : 'Hand Drawn'}
               </span>
             </div>
           </div>
